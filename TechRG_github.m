@@ -56,16 +56,24 @@ Total_Pb = 0.02; % mg L-1
 filename='Nitrate_Analysis_clean.xlsx';
 sheetname = 'Matlab2to6';
 dataNO3= readtable(filename,'Sheet', sheetname);
+NO3absorbance = table2array(dataNO3(:,6));
+NO3slope = table2array(dataNO3(:,7));
+NO3intercept = table2array(dataNO3(:,8));
 
 % NH4-N
 filename='Ammonium_Analysis565_clean.xlsx';
 sheetname = 'Matlab2to6';
 dataNH4= readtable(filename,'Sheet', sheetname);
+NH4absorbance = table2array(dataNH4(:,6));
+NH4slope = table2array(dataNH4(:,7));
+NH4intercept = table2array(dataNH4(:,8));
 
 % ICP – P, Cu, Zn, Pb
 filename = 'ICP_Results_clean.xlsx';
 sheetname = 'Matlab2to6';
-dataICP= readtable(filename,'Sheet', sheetname);
+opts = detectImportOptions(filename, 'Sheet',sheetname,'TextType','string');
+opts = setvartype (opts,{'P','P_SD','Pb','Pb_SD'},'string');
+dataICP= readtable(filename, opts);
 
 % extract treatments and runs from ICP data 
 treatment_ICP = dataICP{2:76,"Treatment"};
@@ -309,16 +317,6 @@ TVD_shale = TVD(filter_idx);
 filter_idx = (treatments == '5');
 TVD_shell = TVD(filter_idx);
 
-TVDclay_Table = table(treatments_run, reps_run, TVD_clay,'VariableNames',{'Run','Rep','TVD'});
-
-TVDglass_Table = table(treatments_run, reps_run, TVD_glass,'VariableNames',{'Run','Rep','TVD'});
-
-TVDsand_Table = table(treatments_run, reps_run, TVD_sand,'VariableNames',{'Run','Rep','TVD'});
-
-TVDshale_Table = table(treatments_run, reps_run, TVD_shale,'VariableNames',{'Run','Rep','TVD'});
-
-TVDshell_Table = table(treatments_run,reps_run, TVD_shell,'VariableNames',{'Run','Rep','TVD'});
-
 % means water retained
 Means_TVD_All = groupsummary(TVD_Table,'Treatment','mean','TotalVolDrained');
 Means_TVD_Runs = groupsummary(TVD_Table,["Treatment","Run"],"mean","TotalVolDrained");
@@ -356,7 +354,7 @@ std_WRshell = std(WR_shell);
 
 % NO3-N concentration
 % extract NO3-N concentration from dataNO3 table 
-NO3 = table2array(dataNO3(:,13));
+NO3 = (NO3absorbance - NO3intercept)./NO3slope;
 NO3_concentration = []; 
 
 for i = 1:3:length(NO3)
@@ -397,7 +395,7 @@ std_NO3shale = std(NO3_shale);
 std_NO3shell = std(NO3_shell);
 
 % NH4-N concentration
-NH4 = table2array(dataNH4(:,13));
+NH4 = (NH4absorbance - NH4intercept)./NH4slope;
 
 NH4_concentration = []; 
 
@@ -444,11 +442,20 @@ glassoutlierRun3 = isoutlier(NH4_glassR3);
 
 
 % P concentration
+% Extract P data from dataICP
+P = table2array(dataICP(2:76,"P")); % units: ng/ml
+
+% recalculate all values under detection limit (i.e. ">") to 65% DL
+for i = 1:length(P)
+    if contains(P(i),"<")
+        val = str2double(erase(P(i),"<"));
+        P(i) = string(val*0.65);
+    end    
+end
+
 %convert ng ml-1 to mg l-1
-P_ng = table2array(dataICP(2:76,"P")); % units: ng/ml
-P_ng_SD = table2array(dataICP(2:76,"P_SD")); % units: ng/ml
-P_mg = (P_ng/1000000)*1000; % units: mg/l
-P_mg_SD = (P_ng_SD/1000000)*1000; % units: mg/l
+P_ng = str2double(P);
+P_mg = (P_ng_double/1000000)*1000; % units: mg/l
 P_Table = table(treatment_ICP,run_ICP,P_mg,'VariableNames',{'Treatment','Run','P'});
 
 % Tables P individual treatments
@@ -481,11 +488,10 @@ std_Pshale = std(P_shale);
 std_Pshell = std(P_shell);
 
 % Cu concentration
-%convert ng ml-1 to mg l-1
+% Extract Cu data from dataICP
 Cu_ng = table2array(dataICP(2:76,"Cu"));
-Cu_ng_SD = table2array(dataICP(2:76,"Cu_SD"));
+%convert ng ml-1 to mg l-1
 Cu_mg = (Cu_ng/1000000)*1000; % units: mg/l
-Cu_mg_SD = (Cu_ng_SD/1000000)*1000; % units: mg/l
 Cu_Table = table(treatment_ICP,run_ICP,Cu_mg,'VariableNames',{'Treatment','Run','Cu'});
 
 % Tables Cu individual treatments
@@ -518,11 +524,13 @@ std_Cushale = std(Cu_shale);
 std_Cushell = std(Cu_shell);
 
 % Zn concentration
+% Extract Zn data from dataICP
+Zn = table2array(dataICP(2:76,"Zn"));
+
 %convert ng ml-1 to mg l-1
-Zn_ng = table2array(dataICP(2:76,"Zn"));
-Zn_ng_SD = table2array(dataICP(2:76,"Zn_SD"));
+Zn = str2double(Zn_ng);
+%convert ng ml-1 to mg l-1
 Zn_mg = (Zn_ng/1000000)*1000; % units: mg/l
-Zn_mg_SD = (Zn_ng_SD/1000000)*1000; % units: mg/l
 Zn_Table = table(treatment_ICP,run_ICP,Zn_mg,'VariableNames',{'Treatment','Run','Zn'});
 
 % Tables Zn individual treatments
@@ -555,11 +563,21 @@ std_Znshale = std(Zn_shale);
 std_Znshell = std(Zn_shell);
 
 % Pb concentration
+% extract Pb data from dataICP
+Pb = table2array(dataICP(2:76,"Pb"));
+
+% recalculate all values under detection limit (i.e. ">") to 65% DL
+for i = 1:length(Pb)
+    if contains(Pb(i),"<")
+        val = str2double(erase(Pb(i),"<"));
+        Pb(i) = string(val*0.65);
+    end    
+end
+
+
 %convert ng ml-1 to mg l-1
-Pb_ng = table2array(dataICP(2:76,"Pb"));
-Pb_ng_SD = table2array(dataICP(2:76,"Pb_SD"));
+Pb_ng = str2double(Pb);
 Pb_mg = (Pb_ng/1000000)*1000; % units: mg/l
-Pb_mg_SD = (Pb_ng_SD/1000000)*1000; % units: mg/l
 Pb_Table = table(treatment_ICP,run_ICP,Pb_mg,'VariableNames',{'Treatment','Run','Pb'});
 
 % Tables Pb individual treatments
@@ -894,16 +912,24 @@ std_pHshell = std(pH_shell);
 filename='Nitrate_Analysis_clean.xlsx';
 sheetname = 'Matlab1to6';
 dataNO3_R1to6= readtable(filename,'Sheet', sheetname);
+NO3absorbance = table2array(dataNO3_R1to6(:,6));
+NO3slope = table2array(dataNO3_R1to6(:,7));
+NO3intercept = table2array(dataNO3_R1to6(:,8));
 
 % NH4-N
 filename='Ammonium_Analysis565_clean.xlsx';
 sheetname = 'Matlab1to6';
 dataNH4_R1to6= readtable(filename,'Sheet', sheetname);
+NH4absorbance = table2array(dataNH4_R1to6(:,6));
+NH4slope = table2array(dataNH4_R1to6(:,7));
+NH4intercept = table2array(dataNH4_R1to6(:,8));
 
 % ICP – P, Cu, Zn, Pb
 filename = 'ICP_Results_clean.xlsx';
 sheetname = 'Matlab1to6';
-dataICP_R1to6= readtable(filename,'Sheet', sheetname);
+opts = detectImportOptions(filename, 'Sheet',sheetname,'TextType','string');
+opts = setvartype (opts,{'P','P_SD','Pb','Pb_SD'},'string');
+dataICP_R1to6= readtable(filename,opts);
 
 % extract treatments and runs from ICP data 
 treatment_ICP = dataICP_R1to6{2:91,"Treatment"};
@@ -917,7 +943,7 @@ runs_treatment = [1 1 1 2 2 2 3 3 3 4 4 4 5 5 5 6 6 6]';
 
 % Calculate data
 % extract NO3-N concentration from dataNO3 table 
-NO31to6 = table2array(dataNO3_R1to6(:,13));
+NO31to6 = (NO3absorbance - NO3intercept)./NO3slope;
 NO3_concentration1to6 = []; 
 
 for i = 1:3:length(NO31to6)
@@ -992,363 +1018,378 @@ NO3_shellR6 = mean(NO3_shell1to6(16:18));
 meanNO3_shell = [NO3_shellR1,NO3_shellR2,NO3_shellR3,NO3_shellR4,NO3_shellR5,NO3_shellR6]';
 
 % NH4
-NH4 = table2array(dataNH4_R1to6(:,13));
-NH4_concentration = []; 
+NH41to6 = (NH4absorbance - NH4intercept)./NH4slope;
+NH41to6_concentration = []; 
 
-for i = 1:2:length(NH4)
-    means = mean(NH4(i:i+1)); 
-    NH4_concentration = [NH4_concentration, means];
+for i = 1:2:length(NH41to6)
+    means = mean(NH41to6(i:i+1)); 
+    NH41to6_concentration = [NH41to6_concentration, means];
 end 
 
-NH4_vertical = NH4_concentration'; % convert horizontal vector to vertical vector
-NH4_Table = table(treatment_ICP,run_ICP,NH4_vertical,'VariableNames',{'Treatment','Run','NH4'});
+NH41to6_vertical = NH41to6_concentration'; % convert horizontal vector to vertical vector
+NH41to6_Table = table(treatment_ICP,run_ICP,NH41to6_vertical,'VariableNames',{'Treatment','Run','NH4'});
 
 % Means NH4-N – treatments
-Means_NH4_All1to6 = groupsummary(NH4_Table,'Treatment','mean','NH4');
+Means_NH4_All1to6 = groupsummary(NH41to6_Table,'Treatment','mean','NH4');
 Means_NH4_All1to6.Properties.VariableNames{'mean_NH4'} = 'NH4';
-Means_NH4_Runs1to6 = groupsummary(NH4_Table,["Treatment","Run"],"mean","NH4");
+Means_NH4_Runs1to6 = groupsummary(NH41to6_Table,["Treatment","Run"],"mean","NH4");
 Means_NH4_Runs1to6.Properties.VariableNames{'mean_NH4'} = 'NH4';
 
 % Tables NH4 individual treatments 
 filter_idx = (treatments_ICP == '1');
-NH4_clay = NH4_vertical(filter_idx);
+NH4_clay1to6 = NH41to6_vertical(filter_idx);
 
 filter_idx = (treatments_ICP == '2');
-NH4_glass = NH4_vertical(filter_idx);
+NH4_glass1to6 = NH41to6_vertical(filter_idx);
 
 filter_idx = (treatments_ICP == '3');
-NH4_sand = NH4_vertical(filter_idx);
+NH4_sand1to6 = NH41to6_vertical(filter_idx);
 
 filter_idx = (treatments_ICP == '4');
-NH4_shale = NH4_vertical(filter_idx);
+NH4_shale1to6 = NH41to6_vertical(filter_idx);
 
 filter_idx = (treatments_ICP == '5');
-NH4_shell = NH4_vertical(filter_idx);
+NH4_shell1to6 = NH41to6_vertical(filter_idx);
 
 % Tables NH4 individual runs within treatments
-NH4_clayR1 = NH4_clay(1:3);
-NH4_clayR2 = mean(NH4_clay(4:6));
-NH4_clayR3 = mean(NH4_clay(7:9));
-NH4_clayR4 = mean(NH4_clay(10:12));
-NH4_clayR5 = mean(NH4_clay(13:15));
-NH4_clayR6 = mean(NH4_clay(16:18));
+NH4_clayR1 = NH4_clay1to6(1:3);
+NH4_clayR2 = mean(NH4_clay1to6(4:6));
+NH4_clayR3 = mean(NH4_clay1to6(7:9));
+NH4_clayR4 = mean(NH4_clay1to6(10:12));
+NH4_clayR5 = mean(NH4_clay1to6(13:15));
+NH4_clayR6 = mean(NH4_clay1to6(16:18));
 meanNH4_clay = [0.8980,NH4_clayR2,NH4_clayR3,NH4_clayR4,NH4_clayR5,NH4_clayR6]';
 
-NH4_glassR1 = mean(NH4_glass(1:3));
-NH4_glassR2 = mean(NH4_glass(4:6));
-NH4_glassR3 = mean(NH4_glass(7:9));
-NH4_glassR4 = mean(NH4_glass(10:12));
-NH4_glassR5 = mean(NH4_glass(13:15));
-NH4_glassR6 = mean(NH4_glass(16:18));
+NH4_glassR1 = mean(NH4_glass1to6(1:3));
+NH4_glassR2 = mean(NH4_glass1to6(4:6));
+NH4_glassR3 = mean(NH4_glass1to6(7:9));
+NH4_glassR4 = mean(NH4_glass1to6(10:12));
+NH4_glassR5 = mean(NH4_glass1to6(13:15));
+NH4_glassR6 = mean(NH4_glass1to6(16:18));
 meanNH4_glass = [NH4_glassR1,NH4_glassR2,NH4_glassR3,NH4_glassR4,NH4_glassR5,NH4_glassR6]';
 
-NH4_sandR1 = mean(NH4_sand(1:3));
-NH4_sandR2 = mean(NH4_sand(4:6));
-NH4_sandR3 = mean(NH4_sand(7:9));
-NH4_sandR4 = mean(NH4_sand(10:12));
-NH4_sandR5 = mean(NH4_sand(13:15));
-NH4_sandR6 = mean(NH4_sand(16:18));
+NH4_sandR1 = mean(NH4_sand1to6(1:3));
+NH4_sandR2 = mean(NH4_sand1to6(4:6));
+NH4_sandR3 = mean(NH4_sand1to6(7:9));
+NH4_sandR4 = mean(NH4_sand1to6(10:12));
+NH4_sandR5 = mean(NH4_sand1to6(13:15));
+NH4_sandR6 = mean(NH4_sand1to6(16:18));
 meanNH4_sand = [NH4_sandR1,NH4_sandR2,NH4_sandR3,NH4_sandR4,NH4_sandR5,NH4_sandR6]';
 
-NH4_shaleR1 = mean(NH4_shale(1:3));
-NH4_shaleR2 = mean(NH4_shale(4:6));
-NH4_shaleR3 = mean(NH4_shale(7:9));
-NH4_shaleR4 = mean(NH4_shale(10:12));
-NH4_shaleR5 = mean(NH4_shale(13:15));
-NH4_shaleR6 = mean(NH4_shale(16:18));
+NH4_shaleR1 = mean(NH4_shale1to6(1:3));
+NH4_shaleR2 = mean(NH4_shale1to6(4:6));
+NH4_shaleR3 = mean(NH4_shale1to6(7:9));
+NH4_shaleR4 = mean(NH4_shale1to6(10:12));
+NH4_shaleR5 = mean(NH4_shale1to6(13:15));
+NH4_shaleR6 = mean(NH4_shale1to6(16:18));
 meanNH4_shale = [NH4_shaleR1,NH4_shaleR2,NH4_shaleR3,NH4_shaleR4,NH4_shaleR5,NH4_shaleR6]';
 
-NH4_shellR1 = mean(NH4_shell(1:3));
-NH4_shellR2 = mean(NH4_shell(4:6));
-NH4_shellR3 = mean(NH4_shell(7:9));
-NH4_shellR4 = mean(NH4_shell(10:12));
-NH4_shellR5 = mean(NH4_shell(13:15));
-NH4_shellR6 = mean(NH4_shell(16:18));
+NH4_shellR1 = mean(NH4_shell1to6(1:3));
+NH4_shellR2 = mean(NH4_shell1to6(4:6));
+NH4_shellR3 = mean(NH4_shell1to6(7:9));
+NH4_shellR4 = mean(NH4_shell1to6(10:12));
+NH4_shellR5 = mean(NH4_shell1to6(13:15));
+NH4_shellR6 = mean(NH4_shell1to6(16:18));
 meanNH4_shell = [NH4_shellR1,NH4_shellR2,NH4_shellR3,NH4_shellR4,NH4_shellR5,NH4_shellR6]';
 
 % P
+% Extract P data from dataICP_R1to6
+P_1to6 = table2array(dataICP_R1to6(2:91,"P")); % unites: ng/ml
+
+% recalculate all values under detection limit (i.e. "<") to 65% DL
+for i = 1:length(P_1to6)
+    if contains(P_1to6(i),"<")
+        val = str2double(erase(P_1to6(i),"<"));
+        P_1to6(i) = string(val*0.65);
+    end    
+end
+
 %convert ng ml-1 to mg l-1
-P_ng = table2array(dataICP_R1to6(2:91,"P")); % units: ng/ml
-P_ng_SD = table2array(dataICP_R1to6(2:91,"P_SD")); % units: ng/ml
-P_mg = (P_ng/1000000)*1000; % units: mg/l
-P_mg_SD = (P_ng_SD/1000000)*1000; % units: mg/l
-P_Table = table(treatment_ICP,run_ICP,P_mg,'VariableNames',{'Treatment','Run','P'});
+P_ng1to6 = str2double(P_1to6); % units: ng/ml
+P_mg1to6 = (P_ng1to6/1000000)*1000; % units: mg/l
+P_Table1to6 = table(treatment_ICP,run_ICP,P_mg1to6,'VariableNames',{'Treatment','Run','P'});
 
 % Tables P individual treatments
 filter_idx = (treatments_ICP == '1');
-P_clay = P_mg(filter_idx);
+P_clay1to6 = P_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '2');
-P_glass = P_mg(filter_idx);
+P_glass1to6 = P_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '3');
-P_sand = P_mg(filter_idx);
+P_sand1to6 = P_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '4');
-P_shale = P_mg(filter_idx);
+P_shale1to6 = P_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '5');
-P_shell = P_mg(filter_idx);
+P_shell1to6 = P_mg1to6(filter_idx);
 
 % Means P – treatments 
-Means_P_All1to6 = groupsummary(P_Table,'Treatment','mean','P');
+Means_P_All1to6 = groupsummary(P_Table1to6,'Treatment','mean','P');
 Means_P_All1to6.Properties.VariableNames{'mean_P'} = 'P';
-Means_P_Runs1to6 = groupsummary(P_Table,["Treatment","Run"],"mean","P");
+Means_P_Runs1to6 = groupsummary(P_Table1to6,["Treatment","Run"],"mean","P");
 Means_P_Runs1to6.Properties.VariableNames{'mean_P'} = 'P';
  
 % Tables P runs within individual treatments
-P_clayR1 = P_clay(1:3);
-P_clayR2 = mean(P_clay(4:6));
-P_clayR3 = mean(P_clay(7:9));
-P_clayR4 = mean(P_clay(10:12));
-P_clayR5 = mean(P_clay(13:15));
-P_clayR6 = mean(P_clay(16:18));
+P_clayR1 = P_clay1to6(1:3);
+P_clayR2 = mean(P_clay1to6(4:6));
+P_clayR3 = mean(P_clay1to6(7:9));
+P_clayR4 = mean(P_clay1to6(10:12));
+P_clayR5 = mean(P_clay1to6(13:15));
+P_clayR6 = mean(P_clay1to6(16:18));
 meanP_clay = [0.4344,P_clayR2,P_clayR3,P_clayR4,P_clayR5,P_clayR6]';
 
-P_glassR1 = mean(P_glass(1:3));
-P_glassR2 = mean(P_glass(4:6));
-P_glassR3 = mean(P_glass(7:9));
-P_glassR4 = mean(P_glass(10:12));
-P_glassR5 = mean(P_glass(13:15));
-P_glassR6 = mean(P_glass(16:18));
+P_glassR1 = mean(P_glass1to6(1:3));
+P_glassR2 = mean(P_glass1to6(4:6));
+P_glassR3 = mean(P_glass1to6(7:9));
+P_glassR4 = mean(P_glass1to6(10:12));
+P_glassR5 = mean(P_glass1to6(13:15));
+P_glassR6 = mean(P_glass1to6(16:18));
 meanP_glass = [P_glassR1,P_glassR2,P_glassR3,P_glassR4,P_glassR5,P_glassR6]';
 
-P_sandR1 = mean(P_sand(1:3));
-P_sandR2 = mean(P_sand(4:6));
-P_sandR3 = mean(P_sand(7:9));
-P_sandR4 = mean(P_sand(10:12));
-P_sandR5 = mean(P_sand(13:15));
-P_sandR6 = mean(P_sand(16:18));
+P_sandR1 = mean(P_sand1to6(1:3));
+P_sandR2 = mean(P_sand1to6(4:6));
+P_sandR3 = mean(P_sand1to6(7:9));
+P_sandR4 = mean(P_sand1to6(10:12));
+P_sandR5 = mean(P_sand1to6(13:15));
+P_sandR6 = mean(P_sand1to6(16:18));
 meanP_sand = [P_sandR1,P_sandR2,P_sandR3,P_sandR4,P_sandR5,P_sandR6]';
 
-P_shaleR1 = mean(P_shale(1:3));
-P_shaleR2 = mean(P_shale(4:6));
-P_shaleR3 = mean(P_shale(7:9));
-P_shaleR4 = mean(P_shale(10:12));
-P_shaleR5 = mean(P_shale(13:15));
-P_shaleR6 = mean(P_shale(16:18));
+P_shaleR1 = mean(P_shale1to6(1:3));
+P_shaleR2 = mean(P_shale1to6(4:6));
+P_shaleR3 = mean(P_shale1to6(7:9));
+P_shaleR4 = mean(P_shale1to6(10:12));
+P_shaleR5 = mean(P_shale1to6(13:15));
+P_shaleR6 = mean(P_shale1to6(16:18));
 meanP_shale = [P_shaleR1,P_shaleR2,P_shaleR3,P_shaleR4,P_shaleR5,P_shaleR6]';
 
-P_shellR1 = mean(P_shell(1:3));
-P_shellR2 = mean(P_shell(4:6));
-P_shellR3 = mean(P_shell(7:9));
-P_shellR4 = mean(P_shell(10:12));
-P_shellR5 = mean(P_shell(13:15));
-P_shellR6 = mean(P_shell(16:18));
+P_shellR1 = mean(P_shell1to6(1:3));
+P_shellR2 = mean(P_shell1to6(4:6));
+P_shellR3 = mean(P_shell1to6(7:9));
+P_shellR4 = mean(P_shell1to6(10:12));
+P_shellR5 = mean(P_shell1to6(13:15));
+P_shellR6 = mean(P_shell1to6(16:18));
 meanP_shell = [P_shellR1,P_shellR2,P_shellR3,P_shellR4,P_shellR5,P_shellR6]';
 
 % Cu
+% Extract Cu data from dataICP_R1to6 
+Cu_ng1to6 = table2array(dataICP_R1to6(2:91,"Cu"));
 %convert ng ml-1 to mg l-1
-Cu_ng = table2array(dataICP_R1to6(2:91,"Cu"));
-Cu_ng_SD = table2array(dataICP_R1to6(2:91,"Cu_SD"));
-Cu_mg = (Cu_ng/1000000)*1000; % units: mg/l
-Cu_mg_SD = (Cu_ng_SD/1000000)*1000; % units: mg/l
-Cu_Table = table(treatment_ICP,run_ICP,Cu_mg,'VariableNames',{'Treatment','Run','Cu'});
+Cu_mg1to6 = (Cu_ng1to6/1000000)*1000; % units: mg/l
+Cu_Table1to6 = table(treatment_ICP,run_ICP,Cu_mg1to6,'VariableNames',{'Treatment','Run','Cu'});
 
 % Tables Cu individual treatments
 filter_idx = (treatments_ICP == '1');
-Cu_clay = Cu_mg(filter_idx);
+Cu_clay1to6 = Cu_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '2');
-Cu_glass = Cu_mg(filter_idx);
+Cu_glass1to6 = Cu_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '3');
-Cu_sand = Cu_mg(filter_idx);
+Cu_sand1to6 = Cu_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '4');
-Cu_shale = Cu_mg(filter_idx);
+Cu_shale1to6 = Cu_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '5');
-Cu_shell = Cu_mg(filter_idx);
+Cu_shell1to6 = Cu_mg1to6(filter_idx);
 
 % Means Cu – treatments 
-Means_Cu_All1to6 = groupsummary(Cu_Table,'Treatment','mean','Cu');
+Means_Cu_All1to6 = groupsummary(Cu_Table1to6,'Treatment','mean','Cu');
 Means_Cu_All1to6.Properties.VariableNames{'mean_Cu'} = 'Cu';
-Means_Cu_Runs1to6 = groupsummary(Cu_Table,["Treatment","Run"],"mean","Cu");
+Means_Cu_Runs1to6 = groupsummary(Cu_Table1to6,["Treatment","Run"],"mean","Cu");
 Means_Cu_Runs1to6.Properties.VariableNames{'mean_Cu'} = 'Cu';
 
 % Tables Cu individual runs within treatments
-Cu_clayR1 = Cu_clay(1:3);
-Cu_clayR2 = mean(Cu_clay(4:6));
-Cu_clayR3 = mean(Cu_clay(7:9));
-Cu_clayR4 = mean(Cu_clay(10:12));
-Cu_clayR5 = mean(Cu_clay(13:15));
-Cu_clayR6 = mean(Cu_clay(16:18));
+Cu_clayR1 = Cu_clay1to6(1:3);
+Cu_clayR2 = mean(Cu_clay1to6(4:6));
+Cu_clayR3 = mean(Cu_clay1to6(7:9));
+Cu_clayR4 = mean(Cu_clay1to6(10:12));
+Cu_clayR5 = mean(Cu_clay1to6(13:15));
+Cu_clayR6 = mean(Cu_clay1to6(16:18));
 meanCu_clay = [0.0372,Cu_clayR2,Cu_clayR3,Cu_clayR4,Cu_clayR5,Cu_clayR6]'; 
 
-Cu_glassR1 = mean(Cu_glass(1:3));
-Cu_glassR2 = mean(Cu_glass(4:6));
-Cu_glassR3 = mean(Cu_glass(7:9));
-Cu_glassR4 = mean(Cu_glass(10:12));
-Cu_glassR5 = mean(Cu_glass(13:15));
-Cu_glassR6 = mean(Cu_glass(16:18));
+Cu_glassR1 = mean(Cu_glass1to6(1:3));
+Cu_glassR2 = mean(Cu_glass1to6(4:6));
+Cu_glassR3 = mean(Cu_glass1to6(7:9));
+Cu_glassR4 = mean(Cu_glass1to6(10:12));
+Cu_glassR5 = mean(Cu_glass1to6(13:15));
+Cu_glassR6 = mean(Cu_glass1to6(16:18));
 meanCu_glass = [Cu_glassR1,Cu_glassR2,Cu_glassR3,Cu_glassR4,Cu_glassR5,Cu_glassR6]';
 
-Cu_sandR1 = mean(Cu_sand(1:3));
-Cu_sandR2 = mean(Cu_sand(4:6));
-Cu_sandR3 = mean(Cu_sand(7:9));
-Cu_sandR4 = mean(Cu_sand(10:12));
-Cu_sandR5 = mean(Cu_sand(13:15));
-Cu_sandR6 = mean(Cu_sand(16:18));
+Cu_sandR1 = mean(Cu_sand1to6(1:3));
+Cu_sandR2 = mean(Cu_sand1to6(4:6));
+Cu_sandR3 = mean(Cu_sand1to6(7:9));
+Cu_sandR4 = mean(Cu_sand1to6(10:12));
+Cu_sandR5 = mean(Cu_sand1to6(13:15));
+Cu_sandR6 = mean(Cu_sand1to6(16:18));
 meanCu_sand = [Cu_sandR1,Cu_sandR2,Cu_sandR3,Cu_sandR4,Cu_sandR5,Cu_sandR6]';
 
-Cu_shaleR1 = mean(Cu_shale(1:3));
-Cu_shaleR2 = mean(Cu_shale(4:6));
-Cu_shaleR3 = mean(Cu_shale(7:9));
-Cu_shaleR4 = mean(Cu_shale(10:12));
-Cu_shaleR5 = mean(Cu_shale(13:15));
-Cu_shaleR6 = mean(Cu_shale(16:18));
+Cu_shaleR1 = mean(Cu_shale1to6(1:3));
+Cu_shaleR2 = mean(Cu_shale1to6(4:6));
+Cu_shaleR3 = mean(Cu_shale1to6(7:9));
+Cu_shaleR4 = mean(Cu_shale1to6(10:12));
+Cu_shaleR5 = mean(Cu_shale1to6(13:15));
+Cu_shaleR6 = mean(Cu_shale1to6(16:18));
 meanCu_shale = [Cu_shaleR1,Cu_shaleR2,Cu_shaleR3,Cu_shaleR4,Cu_shaleR5,Cu_shaleR6]';
 
-Cu_shellR1 = mean(Cu_shell(1:3));
-Cu_shellR2 = mean(Cu_shell(4:6));
-Cu_shellR3 = mean(Cu_shell(7:9));
-Cu_shellR4 = mean(Cu_shell(10:12));
-Cu_shellR5 = mean(Cu_shell(13:15));
-Cu_shellR6 = mean(Cu_shell(16:18));
+Cu_shellR1 = mean(Cu_shell1to6(1:3));
+Cu_shellR2 = mean(Cu_shell1to6(4:6));
+Cu_shellR3 = mean(Cu_shell1to6(7:9));
+Cu_shellR4 = mean(Cu_shell1to6(10:12));
+Cu_shellR5 = mean(Cu_shell1to6(13:15));
+Cu_shellR6 = mean(Cu_shell1to6(16:18));
 meanCu_shell = [Cu_shellR1,Cu_shellR2,Cu_shellR3,Cu_shellR4,Cu_shellR5,Cu_shellR6]';
 
 
 % Zn
+% Extract Zn data from dataICP_Rto6
+Zn_ng1to6 = table2array(dataICP_R1to6(2:91,"Zn"));
 %convert ng ml-1 to mg l-1
-Zn_ng = table2array(dataICP_R1to6(2:91,"Zn"));
-Zn_ng_SD = table2array(dataICP_R1to6(2:91,"Zn_SD"));
-Zn_mg = (Zn_ng/1000000)*1000; % units: mg/l
-Zn_mg_SD = (Zn_ng_SD/1000000)*1000; % units: mg/l
-Zn_Table = table(treatment_ICP,run_ICP,Zn_mg,'VariableNames',{'Treatment','Run','Zn'});
+Zn_mg1to6 = (Zn_ng1to6/1000000)*1000; % units: mg/l
+Zn_Table1to6 = table(treatment_ICP,run_ICP,Zn_mg1to6,'VariableNames',{'Treatment','Run','Zn'});
 
 % Tables Zn individual treatments
 filter_idx = (treatments_ICP == '1');
-Zn_clay = Zn_mg(filter_idx);
+Zn_clay1to6 = Zn_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '2');
-Zn_glass = Zn_mg(filter_idx);
+Zn_glass1to6 = Zn_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '3');
-Zn_sand = Zn_mg(filter_idx);
+Zn_sand1to6 = Zn_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '4');
-Zn_shale = Zn_mg(filter_idx);
+Zn_shale1to6 = Zn_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '5');
-Zn_shell = Zn_mg(filter_idx);
+Zn_shell1to6 = Zn_mg1to6(filter_idx);
 
 % Means Zn – treatments 
-Means_Zn_All1to6 = groupsummary(Zn_Table,'Treatment','mean','Zn');
+Means_Zn_All1to6 = groupsummary(Zn_Table1to6,'Treatment','mean','Zn');
 Means_Zn_All1to6.Properties.VariableNames{'mean_Zn'} = 'Zn';
-Means_Zn_Runs1to6 = groupsummary(Zn_Table,["Treatment","Run"],"mean","Zn");
+Means_Zn_Runs1to6 = groupsummary(Zn_Table1to6,["Treatment","Run"],"mean","Zn");
 Means_Zn_Runs1to6.Properties.VariableNames{'mean_Zn'} = 'Zn';
 
 % Tables Zn individual runs within treatments 
-Zn_clayR1 = Zn_clay(1:3);
-Zn_clayR2 = mean(Zn_clay(4:6));
-Zn_clayR3 = mean(Zn_clay(7:9));
-Zn_clayR4 = mean(Zn_clay(10:12));
-Zn_clayR5 = mean(Zn_clay(13:15));
-Zn_clayR6 = mean(Zn_clay(16:18));
+Zn_clayR1 = Zn_clay1to6(1:3);
+Zn_clayR2 = mean(Zn_clay1to6(4:6));
+Zn_clayR3 = mean(Zn_clay1to6(7:9));
+Zn_clayR4 = mean(Zn_clay1to6(10:12));
+Zn_clayR5 = mean(Zn_clay1to6(13:15));
+Zn_clayR6 = mean(Zn_clay1to6(16:18));
 meanZn_clay = [11.7133,Zn_clayR2,Zn_clayR3,Zn_clayR4,Zn_clayR5,Zn_clayR6]';
 
-Zn_glassR1 = mean(Zn_glass(1:3));
-Zn_glassR2 = mean(Zn_glass(4:6));
-Zn_glassR3 = mean(Zn_glass(7:9));
-Zn_glassR4 = mean(Zn_glass(10:12));
-Zn_glassR5 = mean(Zn_glass(13:15));
-Zn_glassR6 = mean(Zn_glass(16:18));
+Zn_glassR1 = mean(Zn_glass1to6(1:3));
+Zn_glassR2 = mean(Zn_glass1to6(4:6));
+Zn_glassR3 = mean(Zn_glass1to6(7:9));
+Zn_glassR4 = mean(Zn_glass1to6(10:12));
+Zn_glassR5 = mean(Zn_glass1to6(13:15));
+Zn_glassR6 = mean(Zn_glass1to6(16:18));
 meanZn_glass = [Zn_glassR1,Zn_glassR2,Zn_glassR3,Zn_glassR4,Zn_glassR5,Zn_glassR6]';
 
-Zn_sandR1 = mean(Zn_sand(1:3));
-Zn_sandR2 = mean(Zn_sand(4:6));
-Zn_sandR3 = mean(Zn_sand(7:9));
-Zn_sandR4 = mean(Zn_sand(10:12));
-Zn_sandR5 = mean(Zn_sand(13:15));
-Zn_sandR6 = mean(Zn_sand(16:18));
+Zn_sandR1 = mean(Zn_sand1to6(1:3));
+Zn_sandR2 = mean(Zn_sand1to6(4:6));
+Zn_sandR3 = mean(Zn_sand1to6(7:9));
+Zn_sandR4 = mean(Zn_sand1to6(10:12));
+Zn_sandR5 = mean(Zn_sand1to6(13:15));
+Zn_sandR6 = mean(Zn_sand1to6(16:18));
 meanZn_sand = [Zn_sandR1,Zn_sandR2,Zn_sandR3,Zn_sandR4,Zn_sandR5,Zn_sandR6]';
 
-Zn_shaleR1 = mean(Zn_shale(1:3));
-Zn_shaleR2 = mean(Zn_shale(4:6));
-Zn_shaleR3 = mean(Zn_shale(7:9));
-Zn_shaleR4 = mean(Zn_shale(10:12));
-Zn_shaleR5 = mean(Zn_shale(13:15));
-Zn_shaleR6 = mean(Zn_shale(16:18));
+Zn_shaleR1 = mean(Zn_shale1to6(1:3));
+Zn_shaleR2 = mean(Zn_shale1to6(4:6));
+Zn_shaleR3 = mean(Zn_shale1to6(7:9));
+Zn_shaleR4 = mean(Zn_shale1to6(10:12));
+Zn_shaleR5 = mean(Zn_shale1to6(13:15));
+Zn_shaleR6 = mean(Zn_shale1to6(16:18));
 meanZn_shale = [Zn_shaleR1,Zn_shaleR2,Zn_shaleR3,Zn_shaleR4,Zn_shaleR5,Zn_shaleR6]';
 
-Zn_shellR1 = mean(Zn_shell(1:3));
-Zn_shellR2 = mean(Zn_shell(4:6));
-Zn_shellR3 = mean(Zn_shell(7:9));
-Zn_shellR4 = mean(Zn_shell(10:12));
-Zn_shellR5 = mean(Zn_shell(13:15));
-Zn_shellR6 = mean(Zn_shell(16:18));
+Zn_shellR1 = mean(Zn_shell1to6(1:3));
+Zn_shellR2 = mean(Zn_shell1to6(4:6));
+Zn_shellR3 = mean(Zn_shell1to6(7:9));
+Zn_shellR4 = mean(Zn_shell1to6(10:12));
+Zn_shellR5 = mean(Zn_shell1to6(13:15));
+Zn_shellR6 = mean(Zn_shell1to6(16:18));
 meanZn_shell = [Zn_shellR1,Zn_shellR2,Zn_shellR3,Zn_shellR4,Zn_shellR5,Zn_shellR6]';
 
 % Pb
+Pb1to6 = table2array(dataICP_R1to6(2:91,"Pb"));
+
+% recalculate all values under detection limit (i.e. "<") to 65% DL
+for i = 1:length(Pb1to6)
+    if contains(Pb1to6(i),"<")
+        val = str2double(erase(Pb1to6(i),"<"));
+        Pb1to6(i) = string(val*0.65);
+    end    
+end
+
 %convert ng ml-1 to mg l-1
-Pb_ng = table2array(dataICP_R1to6(2:91,"Pb"));
-Pb_ng_SD = table2array(dataICP_R1to6(2:91,"Pb_SD"));
-Pb_mg = (Pb_ng/1000000)*1000; % units: mg/l
-Pb_mg_SD = (Pb_ng_SD/1000000)*1000; % units: mg/l
-Pb_Table = table(treatment_ICP,run_ICP,Pb_mg,'VariableNames',{'Treatment','Run','Pb'});
+Pb_ng1to6 = str2double(Pb1to6);
+Pb_mg1to6 = (Pb_ng1to6/1000000)*1000; % units: mg/l
+Pb_Table1to6 = table(treatment_ICP,run_ICP,Pb_mg1to6,'VariableNames',{'Treatment','Run','Pb'});
 
 % Tables Pb individual treatments
 filter_idx = (treatments_ICP == '1');
-Pb_clay = Pb_mg(filter_idx);
+Pb_clay1to6 = Pb_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '2');
-Pb_glass = Pb_mg(filter_idx);
+Pb_glass1to6 = Pb_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '3');
-Pb_sand = Pb_mg(filter_idx);
+Pb_sand1to6 = Pb_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '4');
-Pb_shale = Pb_mg(filter_idx);
+Pb_shale1to6 = Pb_mg1to6(filter_idx);
 
 filter_idx = (treatments_ICP == '5');
-Pb_shell = Pb_mg(filter_idx);
+Pb_shell1to6 = Pb_mg1to6(filter_idx);
 
 % Means Pb – treatments 
-Means_Pb_All1to6 = groupsummary(Pb_Table,'Treatment','mean','Pb');
+Means_Pb_All1to6 = groupsummary(Pb_Table1to6,'Treatment','mean','Pb');
 Means_Pb_All1to6.Properties.VariableNames{'mean_Pb'} = 'Pb';
-Means_Pb_Runs1to6 = groupsummary(Pb_Table,["Treatment","Run"],"mean","Pb");
+Means_Pb_Runs1to6 = groupsummary(Pb_Table1to6,["Treatment","Run"],"mean","Pb");
 Means_Pb_Runs1to6.Properties.VariableNames{'mean_Pb'} = 'Pb';
 
 % Tables Pb individual treatments within runs
-Pb_clayR1 = Pb_clay(1:3);
-Pb_clayR2 = mean(Pb_clay(4:6));
-Pb_clayR3 = mean(Pb_clay(7:9));
-Pb_clayR4 = mean(Pb_clay(10:12));
-Pb_clayR5 = mean(Pb_clay(13:15));
-Pb_clayR6 = mean(Pb_clay(16:18));
+Pb_clayR1 = Pb_clay1to6(1:3);
+Pb_clayR2 = mean(Pb_clay1to6(4:6));
+Pb_clayR3 = mean(Pb_clay1to6(7:9));
+Pb_clayR4 = mean(Pb_clay1to6(10:12));
+Pb_clayR5 = mean(Pb_clay1to6(13:15));
+Pb_clayR6 = mean(Pb_clay1to6(16:18));
 meanPb_clay = [0.0446,Pb_clayR2,Pb_clayR3,Pb_clayR4,Pb_clayR5,Pb_clayR6]';
 
-Pb_glassR1 = mean(Pb_glass(1:3));
-Pb_glassR2 = mean(Pb_glass(4:6));
-Pb_glassR3 = mean(Pb_glass(7:9));
-Pb_glassR4 = mean(Pb_glass(10:12));
-Pb_glassR5 = mean(Pb_glass(13:15));
-Pb_glassR6 = mean(Pb_glass(16:18));
+Pb_glassR1 = mean(Pb_glass1to6(1:3));
+Pb_glassR2 = mean(Pb_glass1to6(4:6));
+Pb_glassR3 = mean(Pb_glass1to6(7:9));
+Pb_glassR4 = mean(Pb_glass1to6(10:12));
+Pb_glassR5 = mean(Pb_glass1to6(13:15));
+Pb_glassR6 = mean(Pb_glass1to6(16:18));
 meanPb_glass = [Pb_glassR1,Pb_glassR2,Pb_glassR3,Pb_glassR4,Pb_glassR5,Pb_glassR6]';
 
-Pb_sandR1 = mean(Pb_sand(1:3));
-Pb_sandR2 = mean(Pb_sand(4:6));
-Pb_sandR3 = mean(Pb_sand(7:9));
-Pb_sandR4 = mean(Pb_sand(10:12));
-Pb_sandR5 = mean(Pb_sand(13:15));
-Pb_sandR6 = mean(Pb_sand(16:18));
+Pb_sandR1 = mean(Pb_sand1to6(1:3));
+Pb_sandR2 = mean(Pb_sand1to6(4:6));
+Pb_sandR3 = mean(Pb_sand1to6(7:9));
+Pb_sandR4 = mean(Pb_sand1to6(10:12));
+Pb_sandR5 = mean(Pb_sand1to6(13:15));
+Pb_sandR6 = mean(Pb_sand1to6(16:18));
 meanPb_sand = [Pb_sandR1,Pb_sandR2,Pb_sandR3,Pb_sandR4,Pb_sandR5,Pb_sandR6]';
 
-Pb_shaleR1 = mean(Pb_shale(1:3));
-Pb_shaleR2 = mean(Pb_shale(4:6));
-Pb_shaleR3 = mean(Pb_shale(7:9));
-Pb_shaleR4 = mean(Pb_shale(10:12));
-Pb_shaleR5 = mean(Pb_shale(13:15));
-Pb_shaleR6 = mean(Pb_shale(16:18));
+Pb_shaleR1 = mean(Pb_shale1to6(1:3));
+Pb_shaleR2 = mean(Pb_shale1to6(4:6));
+Pb_shaleR3 = mean(Pb_shale1to6(7:9));
+Pb_shaleR4 = mean(Pb_shale1to6(10:12));
+Pb_shaleR5 = mean(Pb_shale1to6(13:15));
+Pb_shaleR6 = mean(Pb_shale1to6(16:18));
 meanPb_shale = [Pb_shaleR1,Pb_shaleR2,Pb_shaleR3,Pb_shaleR4,Pb_shaleR5,Pb_shaleR6]';
 
-Pb_shellR1 = mean(Pb_shell(1:3));
-Pb_shellR2 = mean(Pb_shell(4:6));
-Pb_shellR3 = mean(Pb_shell(7:9));
-Pb_shellR4 = mean(Pb_shell(10:12));
-Pb_shellR5 = mean(Pb_shell(13:15));
-Pb_shellR6 = mean(Pb_shell(16:18));
+Pb_shellR1 = mean(Pb_shell1to6(1:3));
+Pb_shellR2 = mean(Pb_shell1to6(4:6));
+Pb_shellR3 = mean(Pb_shell1to6(7:9));
+Pb_shellR4 = mean(Pb_shell1to6(10:12));
+Pb_shellR5 = mean(Pb_shell1to6(13:15));
+Pb_shellR6 = mean(Pb_shell1to6(16:18));
 meanPb_shell = [Pb_shellR1,Pb_shellR2,Pb_shellR3,Pb_shellR4,Pb_shellR5,Pb_shellR6]';
 
 
